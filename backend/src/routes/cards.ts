@@ -29,22 +29,43 @@ router.get('/cards', (req: Request, res: Response) => {
   }
 });
 
+function resolveWeekId(weekId: unknown, week: unknown): number | null {
+  if (weekId) {
+    return Number(weekId);
+  }
+  if (typeof week === 'string' && week.length > 0) {
+    db.prepare('INSERT OR IGNORE INTO weeks (start_date) VALUES (?)').run(week);
+    const row = db.prepare('SELECT id FROM weeks WHERE start_date = ?').get(week) as
+      | { id: number }
+      | undefined;
+    return row?.id ?? null;
+  }
+  return null;
+}
+
 // POST /cards — crear una card nueva
 router.post('/cards', (req: Request, res: Response) => {
   try {
-    const { activity_id, week_id, day } = req.body;
+    const { activity_id, week_id, week, day } = req.body;
 
-    if (!activity_id || !week_id || !day) {
-      return res.status(400).json({ error: 'Faltan datos obligatorios: activity_id, week_id, day' });
+    if (!activity_id || !day) {
+      return res.status(400).json({ error: 'Faltan datos obligatorios: activity_id, day' });
+    }
+
+    const resolvedWeekId = resolveWeekId(week_id, week);
+    if (!resolvedWeekId) {
+      return res.status(400).json({
+        error: 'Debe indicar week_id o week (YYYY-MM-DD del lunes de la semana)',
+      });
     }
 
     const stmt = db.prepare('INSERT INTO cards (activity_id, week_id, day) VALUES (?, ?, ?)');
-    const result = stmt.run(activity_id, week_id, day);
+    const result = stmt.run(activity_id, resolvedWeekId, day);
 
     const newCard = {
       id: result.lastInsertRowid,
       activity_id,
-      week_id,
+      week_id: resolvedWeekId,
       day,
       completed: 0 // Valor por defecto en la BD
     };
