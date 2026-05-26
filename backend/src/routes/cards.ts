@@ -1,18 +1,24 @@
 import { Router, Request, Response } from 'express';
 import { db } from '../database';
+import { validateDay, validateWeek } from '../validation';
 
 const router = Router();
 
 // GET /cards?week=YYYY-MM-DD — devolver todas las cards de una semana específica
 router.get('/cards', (req: Request, res: Response) => {
   try {
-    const { week } = req.query;
+    const weekQuery = req.query.week;
+    const weekParam = Array.isArray(weekQuery) ? weekQuery[0] : weekQuery;
 
-    if (!week) {
+    if (!weekParam) {
       return res.status(400).json({ error: 'El parámetro week (YYYY-MM-DD) es requerido en la query' });
     }
 
-    // Unimos con la tabla weeks para filtrar por el start_date
+    const weekError = validateWeek(weekParam);
+    if (weekError) {
+      return res.status(400).json({ error: weekError });
+    }
+
     const stmt = db.prepare(`
       SELECT cards.* 
       FROM cards 
@@ -20,7 +26,7 @@ router.get('/cards', (req: Request, res: Response) => {
       WHERE weeks.start_date = ?
     `);
     
-    const cards = stmt.all(week);
+    const cards = stmt.all(weekParam);
 
     res.json(cards);
   } catch (error) {
@@ -50,6 +56,18 @@ router.post('/cards', (req: Request, res: Response) => {
 
     if (!activity_id || !day) {
       return res.status(400).json({ error: 'Faltan datos obligatorios: activity_id, day' });
+    }
+
+    const dayError = validateDay(day);
+    if (dayError) {
+      return res.status(400).json({ error: dayError });
+    }
+
+    if (week !== undefined && week !== null && week !== '') {
+      const weekError = validateWeek(week);
+      if (weekError) {
+        return res.status(400).json({ error: weekError });
+      }
     }
 
     const resolvedWeekId = resolveWeekId(week_id, week);

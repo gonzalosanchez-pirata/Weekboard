@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { db } from '../database';
+import { validateActivityBody } from '../validation';
 
 const router = Router();
 
@@ -25,14 +26,12 @@ router.get('/activities', (req: Request, res: Response) => {
 // POST /activities — crear una actividad nueva
 router.post('/activities', (req: Request, res: Response) => {
   try {
-    const { name, color, days } = req.body;
-
-    // Validación básica
-    if (!name || !days || !Array.isArray(days)) {
-      return res.status(400).json({ error: 'Faltan datos obligatorios o el formato de days es incorrecto' });
+    const validated = validateActivityBody(req.body);
+    if ('error' in validated) {
+      return res.status(400).json({ error: validated.error });
     }
+    const { name, color, days } = validated;
 
-    // Guardar el array como string JSON
     const daysString = JSON.stringify(days);
 
     const stmt = db.prepare('INSERT INTO activities (name, color, days) VALUES (?, ?, ?)');
@@ -59,11 +58,11 @@ router.post('/activities', (req: Request, res: Response) => {
 router.put('/activities/:id', (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const { name, color, days } = req.body;
-
-    if (!name || !days || !Array.isArray(days)) {
-      return res.status(400).json({ error: 'Faltan datos obligatorios o el formato de days es incorrecto' });
+    const validated = validateActivityBody(req.body);
+    if ('error' in validated) {
+      return res.status(400).json({ error: validated.error });
     }
+    const { name, color, days } = validated;
 
     const daysString = JSON.stringify(days);
 
