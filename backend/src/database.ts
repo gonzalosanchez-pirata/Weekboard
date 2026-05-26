@@ -1,22 +1,20 @@
 import Database from 'better-sqlite3';
 import path from 'path';
 
-// La ruta del archivo apunta a la carpeta "backend", un nivel arriba de "src"
-const dbPath = path.join(__dirname, '..', 'weekboard.db');
+const isTest = process.env.NODE_ENV === 'test';
+const dbPath = isTest ? ':memory:' : path.join(__dirname, '..', 'weekboard.db');
 
 export const db = new Database(dbPath);
 
-// Configurar pragmas recomendados (Write-Ahead Logging y habilitar llaves foráneas)
 db.pragma('journal_mode = WAL');
 db.pragma('foreign_keys = ON');
 
-// Crear tablas si no existen
 db.exec(`
   CREATE TABLE IF NOT EXISTS activities (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL,
     color TEXT,
-    days TEXT NOT NULL, -- Guardará el arreglo de días en formato JSON
+    days TEXT NOT NULL,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   );
 
@@ -30,7 +28,7 @@ db.exec(`
     activity_id INTEGER NOT NULL,
     week_id INTEGER NOT NULL,
     day TEXT NOT NULL,
-    completed INTEGER DEFAULT 0, -- 0 para falso, 1 para verdadero
+    completed INTEGER DEFAULT 0,
     FOREIGN KEY (activity_id) REFERENCES activities(id) ON DELETE CASCADE,
     FOREIGN KEY (week_id) REFERENCES weeks(id) ON DELETE CASCADE
   );
