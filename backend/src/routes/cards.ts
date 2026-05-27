@@ -1,8 +1,35 @@
 import { Router, Request, Response } from 'express';
 import { db } from '../database';
-import { validateDay, validateWeek } from '../validation';
+import { validateDay, validateDurationSeconds, validateWeek } from '../validation';
 
 const router = Router();
+
+interface CardTimerRow {
+  id: number;
+  duration_seconds: number | null;
+  remaining_seconds: number | null;
+  timer_running: number;
+  last_started_at: string | null;
+}
+
+function getCardTimer(id: string): CardTimerRow | undefined {
+  return db
+    .prepare(
+      `SELECT id, duration_seconds, remaining_seconds, timer_running, last_started_at
+       FROM cards WHERE id = ?`
+    )
+    .get(id) as CardTimerRow | undefined;
+}
+
+function timerResponse(row: CardTimerRow) {
+  return {
+    id: row.id,
+    duration_seconds: row.duration_seconds,
+    remaining_seconds: row.remaining_seconds,
+    timer_running: row.timer_running,
+    last_started_at: row.last_started_at,
+  };
+}
 
 // GET /cards?week=YYYY-MM-DD — devolver todas las cards de una semana específica
 router.get('/cards', (req: Request, res: Response) => {
@@ -118,6 +145,134 @@ router.patch('/cards/:id/complete', (req: Request, res: Response) => {
   } catch (error) {
     console.error('Error al cambiar el estado de la card:', error);
     res.status(500).json({ error: 'Error al actualizar el estado de la card' });
+  }
+});
+
+// PATCH /cards/:id/duration — configurar duración del cronómetro
+router.patch('/cards/:id/duration', (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { duration_seconds } = req.body;
+
+    const durationError = validateDurationSeconds(duration_seconds);
+    if (durationError) {
+      return res.status(400).json({ error: durationError });
+    }
+
+    const card = getCardTimer(id);
+    if (!card) {
+      return res.status(404).json({ error: 'Card no encontrada' });
+    }
+
+    db.prepare(
+      `UPDATE cards
+       SET duration_seconds = ?, remaining_seconds = ?, timer_running = 0, last_started_at = NULL
+       WHERE id = ?`
+    ).run(duration_seconds, duration_seconds, id);
+
+    const updated = getCardTimer(id)!;
+    res.json(timerResponse(updated));
+  } catch (error) {
+    console.error('Error al configurar duración:', error);
+    res.status(500).json({ error: 'Error al configurar la duración' });
+  }
+});
+
+// PATCH /cards/:id/timer/start — iniciar cronómetro
+router.patch('/cards/:id/timer/start', (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+
+    const card = getCardTimer(id);
+    if (!card) {
+      return res.status(404).json({ error: 'Card no encontrada' });
+    }
+
+    if (card.duration_seconds === null) {
+      return res.status(400).json({
+        error: 'Debe configurar la duración antes de iniciar el cronómetro',
+      });
+    }
+
+    if (card.remaining_seconds === null || card.remaining_seconds <= 0) {
+      return res.status(400).json({
+        error: 'No se puede iniciar el cronómetro sin tiempo restante',
+      });
+    }
+
+    const now = new Date().toISOString();
+    db.prepare(
+      'UPDATE cards SET timer_running = 1, last_started_at = ? WHERE id = ?'
+    ).run(now, id);
+
+    const updated = getCardTimer(id)!;
+    res.json(timerResponse(updated));
+  } catch (error) {
+    console.error('Error al iniciar cronómetro:', error);
+    res.status(500).json({ error: 'Error al iniciar el cronómetro' });
+  }
+});
+
+// PATCH /cards/:id/timer/pause — pausar cronómetro
+router.patch('/cards/:id/timer/pause', (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+
+    const card = getCardTimer(id);
+    if (!card) {
+      return res.status(404).json({ error: 'Card no encontrada' });
+    }
+
+    if (card.timer_running !== 1) {
+      return res.status(400).json({ error: 'El cronómetro no está en ejecución' });
+    }
+
+    const elapsed = Math.floor(
+      (Date.now() - new Date(card.last_started_at!).getTime()) / 1000
+    );
+    const newRemaining = Math.max(0, (card.remaining_seconds ?? 0) - elapsed);
+
+    db.prepare(
+      `UPDATE cards
+       SET remaining_seconds = ?, timer_running = 0, last_started_at = NULL
+       WHERE id = ?`
+    ).run(newRemaining, id);
+
+    const updated = getCardTimer(id)!;
+    res.json(timerResponse(updated));
+  } catch (error) {
+    console.error('Error al pausar cronómetro:', error);
+    res.status(500).json({ error: 'Error al pausar el cronómetro' });
+  }
+});
+
+// PATCH /cards/:id/timer/reset — resetear cronómetro
+router.patch('/cards/:id/timer/reset', (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+
+    const card = getCardTimer(id);
+    if (!card) {
+      return res.status(404).json({ error: 'Card no encontrada' });
+    }
+
+    if (card.duration_seconds === null) {
+      return res.status(400).json({
+        error: 'Debe configurar la duración antes de resetear el cronómetro',
+      });
+    }
+
+    db.prepare(
+      `UPDATE cards
+       SET remaining_seconds = duration_seconds, timer_running = 0, last_started_at = NULL
+       WHERE id = ?`
+    ).run(id);
+
+    const updated = getCardTimer(id)!;
+    res.json(timerResponse(updated));
+  } catch (error) {
+    console.error('Error al resetear cronómetro:', error);
+    res.status(500).json({ error: 'Error al resetear el cronómetro' });
   }
 });
 

@@ -29,10 +29,26 @@ db.exec(`
     week_id INTEGER NOT NULL,
     day TEXT NOT NULL,
     completed INTEGER DEFAULT 0,
+    duration_seconds INTEGER NULL,
+    remaining_seconds INTEGER NULL,
+    timer_running INTEGER DEFAULT 0,
+    last_started_at TEXT NULL,
     FOREIGN KEY (activity_id) REFERENCES activities(id) ON DELETE CASCADE,
     FOREIGN KEY (week_id) REFERENCES weeks(id) ON DELETE CASCADE
   );
 `);
+
+function ensureColumn(table: string, column: string, definition: string): void {
+  const columns = db.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[];
+  if (!columns.some((c) => c.name === column)) {
+    db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+  }
+}
+
+ensureColumn('cards', 'duration_seconds', 'INTEGER NULL');
+ensureColumn('cards', 'remaining_seconds', 'INTEGER NULL');
+ensureColumn('cards', 'timer_running', 'INTEGER DEFAULT 0');
+ensureColumn('cards', 'last_started_at', 'TEXT NULL');
 
 console.log('Base de datos inicializada: tablas verificadas o creadas.');
 

@@ -87,6 +87,19 @@ export function validateDay(day: unknown): string | null {
   return null;
 }
 
+export const MIN_DURATION_SECONDS = 60;
+export const MAX_DURATION_SECONDS = 86400;
+
+export function validateDurationSeconds(value: unknown): string | null {
+  if (typeof value !== 'number' || !Number.isInteger(value)) {
+    return 'duration_seconds debe ser un entero entre 60 y 86400';
+  }
+  if (value < MIN_DURATION_SECONDS || value > MAX_DURATION_SECONDS) {
+    return 'duration_seconds debe ser un entero entre 60 y 86400';
+  }
+  return null;
+}
+
 export function validateActivityBody(body: {
   name: unknown;
   color: unknown;
