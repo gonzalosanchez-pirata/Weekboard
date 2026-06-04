@@ -7,10 +7,12 @@ import cardsRouter from './routes/cards';
 
 const app = express();
 
+const isDev = process.env.NODE_ENV !== 'production';
+
 const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 100,
-  message: { error: 'Demasiadas peticiones. Intentá de nuevo en 15 minutos.' },
+  windowMs: isDev ? 60 * 1000 : 15 * 60 * 1000,
+  max: isDev ? 500 : 100,
+  message: { error: 'Demasiadas peticiones. Intentá de nuevo en unos minutos.' },
   standardHeaders: true,
   legacyHeaders: false,
 });
