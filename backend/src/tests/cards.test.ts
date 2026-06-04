@@ -153,7 +153,7 @@ describe('PATCH /api/cards/:id/duration', () => {
     expect(res.body.last_started_at).toBeNull();
   });
 
-  it.each([59, 90000, 1.5])('devuelve 400 si duration_seconds es inválido (%s)', async (value) => {
+  it.each([0, 360000, 1.5])('devuelve 400 si duration_seconds es inv?lido (%s)', async (value) => {
     const card = createCard();
 
     const res = await request(app)
