@@ -265,7 +265,29 @@ async function onTick(): Promise<void> {
       }
     }
   }
-  render();
+  
+  for (const card of cards) {
+    if (card.timer_running === 1 && (card.duration_seconds ?? 0) > 0) {
+      const ratio = getProgressRatio(card, nowMs);
+      const cardEl = appEl.querySelector(`.card[data-card-id="${card.id}"]`);
+      if (cardEl) {
+        const bar = cardEl.querySelector('.card__progress-bar');
+        if (bar instanceof HTMLElement) {
+          bar.style.transform = `scaleX(${ratio})`;
+        }
+      }
+    }
+  }
+
+  if (selectedCardId !== null) {
+    const selected = cards.find((c) => c.id === selectedCardId);
+    if (selected && selected.timer_running === 1) {
+      const countdown = appEl.querySelector('#timer-countdown');
+      if (countdown) {
+        countdown.textContent = formatHMS(getEffectiveRemaining(selected, nowMs));
+      }
+    }
+  }
 }
 
 function requestNotificationPermissionOnce(): void {
