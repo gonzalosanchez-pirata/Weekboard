@@ -1,4 +1,5 @@
 import express from 'express';
+import helmet from 'helmet';
 import cors from 'cors';
 import rateLimit from 'express-rate-limit';
 import './database';
@@ -19,6 +20,7 @@ const limiter = rateLimit({
 });
 
 // Middleware globales
+app.use(helmet());
 app.use(cors());
 app.use(express.json());
 app.use('/api', limiter);
