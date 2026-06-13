@@ -1,3 +1,4 @@
+// Constantes y tipos globales
 const API_BASE = 'http://localhost:3000/api';
 
 const DAY_KEYS = [
@@ -50,6 +51,7 @@ interface ApiErrorBody {
   error?: string;
 }
 
+// Inicialización del DOM y estado global
 const appRoot = document.getElementById('app');
 if (!appRoot) {
   throw new Error('No se encontró el elemento #app');
@@ -71,6 +73,7 @@ const MIN_DURATION_SECONDS = 1;
 /** Máximo 99:59:59 */
 const MAX_DURATION_SECONDS = 99 * 3600 + 59 * 60 + 59;
 
+// Auxiliares de fechas
 function getMonday(d: Date): Date {
   const date = new Date(d.getFullYear(), d.getMonth(), d.getDate());
   const day = date.getDay();
@@ -109,6 +112,7 @@ function isDayKey(value: string): value is DayKey {
   return (DAY_KEYS as readonly string[]).includes(value);
 }
 
+// Gestión de API y comunicación
 async function parseErrorResponse(response: Response): Promise<string> {
   try {
     const body = (await response.json()) as ApiErrorBody;
@@ -183,6 +187,7 @@ async function resetTimer(cardId: number): Promise<CardTimerState> {
   return apiFetch<CardTimerState>(`${API_BASE}/cards/${cardId}/timer/reset`, { method: 'PATCH' });
 }
 
+// Gestión del estado de la interfaz
 function buildCardViews(activities: Activity[], rawCards: Card[]): CardView[] {
   const activityMap = new Map(activities.map((a) => [a.id, a]));
   const views: CardView[] = [];
@@ -206,6 +211,7 @@ function mergeTimerState(cardId: number, state: CardTimerState): void {
   card.last_started_at = state.last_started_at;
 }
 
+// Auxiliares del cronómetro y cálculo de tiempo
 function formatHMS(totalSeconds: number): string {
   const s = Math.max(0, Math.floor(totalSeconds));
   const hh = String(Math.floor(s / 3600)).padStart(2, '0');
@@ -231,6 +237,7 @@ function getProgressRatio(card: Card, nowMs: number): number {
   return Math.max(0, Math.min(1, remaining / duration));
 }
 
+// Sistema de actualización en tiempo real (Ticker)
 function shouldTickerRun(): boolean {
   return cards.some((c) => c.timer_running === 1);
 }
@@ -290,6 +297,7 @@ async function onTick(): Promise<void> {
   }
 }
 
+// Notificaciones del sistema
 function requestNotificationPermissionOnce(): void {
   if (notificationsPermissionRequested) return;
   notificationsPermissionRequested = true;
@@ -303,6 +311,7 @@ function notifyTimerFinished(activityName: string): void {
   new Notification('Weekboard', { body: activityName });
 }
 
+// Carga inicial y lógica de la semana
 async function loadWeek(): Promise<void> {
   loading = true;
   error = null;
@@ -321,6 +330,7 @@ async function loadWeek(): Promise<void> {
   }
 }
 
+// Generadores de elementos DOM
 function createElement<K extends keyof HTMLElementTagNameMap>(
   tag: K,
   className?: string,
@@ -551,6 +561,7 @@ function render(): void {
   appEl.append(layout);
 }
 
+// Handlers de interacción y llamadas a API
 async function handleCreateCard(dayKey: DayKey, name: string, color: string): Promise<void> {
   const weekStart = toWeekParam(currentMonday);
   const activity = await createActivity(name, color, dayKey);
@@ -568,6 +579,11 @@ async function handleToggle(cardId: number): Promise<void> {
 async function handleDelete(cardId: number): Promise<void> {
   await deleteCard(cardId);
   cards = cards.filter((c) => c.id !== cardId);
+  if (selectedCardId === cardId) {
+    selectedCardId = null;
+    panelOpen = false;
+  }
+  ensureTicker();
   render();
 }
 
@@ -631,6 +647,7 @@ async function commitTimerDurationFromInputs(force = false): Promise<void> {
   ensureTicker();
 }
 
+// Listeners de eventos y delegación en el DOM
 appEl.addEventListener('click', async (event) => {
   const target = event.target;
   if (!(target instanceof HTMLElement)) return;
@@ -888,5 +905,6 @@ appEl.addEventListener('focusout', (event) => {
   }
 });
 
+// Inicialización de la aplicación
 requestNotificationPermissionOnce();
 void loadWeek();

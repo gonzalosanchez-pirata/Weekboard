@@ -9,6 +9,7 @@ const app = express();
 
 const isDev = process.env.NODE_ENV !== 'production';
 
+// Configuración de rate limiting
 const limiter = rateLimit({
   windowMs: isDev ? 60 * 1000 : 15 * 60 * 1000,
   max: isDev ? 500 : 100,
@@ -17,13 +18,16 @@ const limiter = rateLimit({
   legacyHeaders: false,
 });
 
+// Middleware globales
 app.use(cors());
 app.use(express.json());
 app.use('/api', limiter);
 
+// Registro de rutas
 app.use('/api', activitiesRouter);
 app.use('/api', cardsRouter);
 
+// Health check
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok' });
 });

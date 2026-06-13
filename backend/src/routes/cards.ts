@@ -12,6 +12,7 @@ interface CardTimerRow {
   last_started_at: string | null;
 }
 
+// Funciones auxiliares para gestión de parámetros y base de datos
 function getParamId(req: Request): string {
   const raw = (req.params as unknown as { id?: string | string[] }).id;
   if (Array.isArray(raw)) {

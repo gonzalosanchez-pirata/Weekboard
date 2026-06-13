@@ -1,3 +1,4 @@
+// Configuración de validación y constantes
 export const VALID_DAYS = [
   'monday',
   'tuesday',
@@ -15,6 +16,7 @@ const WEEK_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 const VALID_DAYS_LIST = VALID_DAYS.join(', ');
 
+// Auxiliares de validación
 export function firstError(...errors: (string | null)[]): string | null {
   for (const err of errors) {
     if (err) {
@@ -24,6 +26,7 @@ export function firstError(...errors: (string | null)[]): string | null {
   return null;
 }
 
+// Validadores de campos individuales
 export function validateName(name: unknown): string | null {
   if (typeof name !== 'string' || name.trim().length === 0) {
     return 'name debe tener entre 1 y 100 caracteres';
@@ -87,6 +90,7 @@ export function validateDay(day: unknown): string | null {
   return null;
 }
 
+// Configuración de límites del cronómetro
 export const MIN_DURATION_SECONDS = 1;
 /** Máximo 99:59:59 */
 export const MAX_DURATION_SECONDS = 99 * 3600 + 59 * 60 + 59;
@@ -101,6 +105,7 @@ export function validateDurationSeconds(value: unknown): string | null {
   return null;
 }
 
+// Validadores de cuerpo de peticiones
 export function validateActivityBody(body: {
   name: unknown;
   color: unknown;
