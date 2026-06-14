@@ -133,3 +133,11 @@ export function validateActivityBody(body: {
     days: body.days as ValidDay[],
   };
 }
+
+// Validador de parámetro :id en rutas
+export function validateNumericId(id: unknown): string | null {
+  if (typeof id !== 'string' || !/^\d+$/.test(id) || Number(id) === 0) {
+    return 'id debe ser un entero positivo';
+  }
+  return null;
+}

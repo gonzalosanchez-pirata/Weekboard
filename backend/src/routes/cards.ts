@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { db } from '../database';
-import { validateDay, validateDurationSeconds, validateWeek } from '../validation';
+import { validateDay, validateDurationSeconds, validateWeek, validateNumericId } from '../validation';
 
 const router = Router();
 
@@ -135,6 +135,10 @@ router.post('/cards', (req: Request, res: Response) => {
 router.patch('/cards/:id/complete', (req: Request, res: Response) => {
   try {
     const id = getParamId(req);
+    const idError = validateNumericId(id);
+    if (idError) {
+      return res.status(400).json({ error: idError });
+    }
 
     // Primero verificamos si existe y obtenemos su estado actual
     const getStmt = db.prepare('SELECT completed FROM cards WHERE id = ?');
@@ -161,6 +165,10 @@ router.patch('/cards/:id/complete', (req: Request, res: Response) => {
 router.patch('/cards/:id/duration', (req: Request, res: Response) => {
   try {
     const id = getParamId(req);
+    const idError = validateNumericId(id);
+    if (idError) {
+      return res.status(400).json({ error: idError });
+    }
     const { duration_seconds } = req.body;
 
     const durationError = validateDurationSeconds(duration_seconds);
@@ -191,6 +199,10 @@ router.patch('/cards/:id/duration', (req: Request, res: Response) => {
 router.patch('/cards/:id/timer/start', (req: Request, res: Response) => {
   try {
     const id = getParamId(req);
+    const idError = validateNumericId(id);
+    if (idError) {
+      return res.status(400).json({ error: idError });
+    }
 
     const card = getCardTimer(id);
     if (!card) {
@@ -226,6 +238,10 @@ router.patch('/cards/:id/timer/start', (req: Request, res: Response) => {
 router.patch('/cards/:id/timer/pause', (req: Request, res: Response) => {
   try {
     const id = getParamId(req);
+    const idError = validateNumericId(id);
+    if (idError) {
+      return res.status(400).json({ error: idError });
+    }
 
     const card = getCardTimer(id);
     if (!card) {
@@ -259,6 +275,10 @@ router.patch('/cards/:id/timer/pause', (req: Request, res: Response) => {
 router.patch('/cards/:id/timer/reset', (req: Request, res: Response) => {
   try {
     const id = getParamId(req);
+    const idError = validateNumericId(id);
+    if (idError) {
+      return res.status(400).json({ error: idError });
+    }
 
     const card = getCardTimer(id);
     if (!card) {
@@ -289,6 +309,10 @@ router.patch('/cards/:id/timer/reset', (req: Request, res: Response) => {
 router.delete('/cards/:id', (req: Request, res: Response) => {
   try {
     const id = getParamId(req);
+    const idError = validateNumericId(id);
+    if (idError) {
+      return res.status(400).json({ error: idError });
+    }
 
     const stmt = db.prepare('DELETE FROM cards WHERE id = ?');
     const result = stmt.run(id);

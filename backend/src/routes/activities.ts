@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { db } from '../database';
-import { validateActivityBody } from '../validation';
+import { validateActivityBody, validateNumericId } from '../validation';
 
 const router = Router();
 
@@ -58,6 +58,10 @@ router.post('/activities', (req: Request, res: Response) => {
 router.put('/activities/:id', (req: Request, res: Response) => {
   try {
     const { id } = req.params;
+    const idError = validateNumericId(id);
+    if (idError) {
+      return res.status(400).json({ error: idError });
+    }
     const validated = validateActivityBody(req.body);
     if ('error' in validated) {
       return res.status(400).json({ error: validated.error });
@@ -84,6 +88,10 @@ router.put('/activities/:id', (req: Request, res: Response) => {
 router.delete('/activities/:id', (req: Request, res: Response) => {
   try {
     const { id } = req.params;
+    const idError = validateNumericId(id);
+    if (idError) {
+      return res.status(400).json({ error: idError });
+    }
 
     const stmt = db.prepare('DELETE FROM activities WHERE id = ?');
     const result = stmt.run(id);

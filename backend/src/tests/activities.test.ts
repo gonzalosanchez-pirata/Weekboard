@@ -71,3 +71,31 @@ describe('DELETE /api/activities/:id', () => {
     expect(res.status).toBe(404);
   });
 });
+
+describe('Validación de :id en rutas de activities', () => {
+  it('PUT /api/activities/abc → 400', async () => {
+    const res = await request(app)
+      .put('/api/activities/abc')
+      .send({ name: 'Test', color: '#aabbcc', days: ['monday'] });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe('id debe ser un entero positivo');
+  });
+
+  it('DELETE /api/activities/abc → 400', async () => {
+    const res = await request(app).delete('/api/activities/abc');
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe('id debe ser un entero positivo');
+  });
+
+  it('DELETE /api/activities/-1 → 400', async () => {
+    const res = await request(app).delete('/api/activities/-1');
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe('id debe ser un entero positivo');
+  });
+
+  it('DELETE /api/activities/0 → 400', async () => {
+    const res = await request(app).delete('/api/activities/0');
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe('id debe ser un entero positivo');
+  });
+});

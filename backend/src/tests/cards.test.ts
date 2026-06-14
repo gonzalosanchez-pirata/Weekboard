@@ -280,3 +280,55 @@ describe('PATCH /api/cards/:id/timer/reset', () => {
     expect(res.status).toBe(404);
   });
 });
+
+describe('Validación de :id en rutas de cards', () => {
+  it('PATCH /api/cards/abc/complete → 400', async () => {
+    const res = await request(app).patch('/api/cards/abc/complete');
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe('id debe ser un entero positivo');
+  });
+
+  it('PATCH /api/cards/0/complete → 400', async () => {
+    const res = await request(app).patch('/api/cards/0/complete');
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe('id debe ser un entero positivo');
+  });
+
+  it('PATCH /api/cards/-1/duration → 400', async () => {
+    const res = await request(app)
+      .patch('/api/cards/-1/duration')
+      .send({ duration_seconds: 300 });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe('id debe ser un entero positivo');
+  });
+
+  it('PATCH /api/cards/abc/timer/start → 400', async () => {
+    const res = await request(app).patch('/api/cards/abc/timer/start');
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe('id debe ser un entero positivo');
+  });
+
+  it('PATCH /api/cards/abc/timer/pause → 400', async () => {
+    const res = await request(app).patch('/api/cards/abc/timer/pause');
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe('id debe ser un entero positivo');
+  });
+
+  it('PATCH /api/cards/abc/timer/reset → 400', async () => {
+    const res = await request(app).patch('/api/cards/abc/timer/reset');
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe('id debe ser un entero positivo');
+  });
+
+  it('DELETE /api/cards/0 → 400', async () => {
+    const res = await request(app).delete('/api/cards/0');
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe('id debe ser un entero positivo');
+  });
+
+  it('DELETE /api/cards/abc → 400', async () => {
+    const res = await request(app).delete('/api/cards/abc');
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe('id debe ser un entero positivo');
+  });
+});
