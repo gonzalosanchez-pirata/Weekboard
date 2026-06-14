@@ -19,9 +19,24 @@ const limiter = rateLimit({
   legacyHeaders: false,
 });
 
+// Orígenes permitidos: leídos desde ALLOWED_ORIGINS o defaults de desarrollo
+const allowedOrigins: string[] = process.env.ALLOWED_ORIGINS
+  ? process.env.ALLOWED_ORIGINS.split(',').map((o) => o.trim())
+  : ['http://localhost:5500', 'http://127.0.0.1:5500', 'http://localhost:3000'];
+
+const corsOptions: cors.CorsOptions = {
+  origin: (origin, callback) => {
+    // Permitir requests sin header Origin (Postman, curl, supertest, etc.)
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.includes(origin)) return callback(null, true);
+    callback(new Error(`CORS: origen no permitido: ${origin}`));
+  },
+  credentials: true,
+};
+
 // Middleware globales
 app.use(helmet());
-app.use(cors());
+app.use(cors(corsOptions));
 app.use(express.json());
 app.use('/api', limiter);
 
