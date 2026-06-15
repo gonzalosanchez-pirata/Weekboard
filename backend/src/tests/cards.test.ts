@@ -332,3 +332,43 @@ describe('Validación de :id en rutas de cards', () => {
     expect(res.body.error).toBe('id debe ser un entero positivo');
   });
 });
+
+describe('Unicidad de weeks.start_date al crear cards vía POST /api/cards', () => {
+  it('dos cards con el mismo week resultan en una sola fila en weeks para ese start_date', async () => {
+    const activityA = createActivity();
+    const activityB = createActivity();
+    const weekDate = '2026-06-09';
+
+    await request(app)
+      .post('/api/cards')
+      .send({ activity_id: activityA.lastInsertRowid, week: weekDate, day: 'monday' });
+
+    await request(app)
+      .post('/api/cards')
+      .send({ activity_id: activityB.lastInsertRowid, week: weekDate, day: 'tuesday' });
+
+    const row = db
+      .prepare('SELECT COUNT(*) AS count FROM weeks WHERE start_date = ?')
+      .get(weekDate) as { count: number };
+
+    expect(row.count).toBe(1);
+  });
+
+  it('ambas cards quedan asociadas al mismo week_id', async () => {
+    const activityA = createActivity();
+    const activityB = createActivity();
+    const weekDate = '2026-06-09';
+
+    const resA = await request(app)
+      .post('/api/cards')
+      .send({ activity_id: activityA.lastInsertRowid, week: weekDate, day: 'monday' });
+
+    const resB = await request(app)
+      .post('/api/cards')
+      .send({ activity_id: activityB.lastInsertRowid, week: weekDate, day: 'tuesday' });
+
+    expect(resA.status).toBe(201);
+    expect(resB.status).toBe(201);
+    expect(resA.body.week_id).toBe(resB.body.week_id);
+  });
+});
