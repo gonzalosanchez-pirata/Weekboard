@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { db } from '../database';
-import { validateDay, validateDurationSeconds, validateWeek, validateNumericId } from '../validation';
+import { validateDay, validateDurationSeconds, validateWeek, validateNumericId, validatePositiveIntegerId } from '../validation';
 
 const router = Router();
 
@@ -90,8 +90,13 @@ router.post('/cards', (req: Request, res: Response) => {
   try {
     const { activity_id, week_id, week, day } = req.body;
 
-    if (!activity_id || !day) {
-      return res.status(400).json({ error: 'Faltan datos obligatorios: activity_id, day' });
+    if (!day) {
+      return res.status(400).json({ error: 'Falta el dato obligatorio: day' });
+    }
+
+    const activityIdError = validatePositiveIntegerId(activity_id);
+    if (activityIdError) {
+      return res.status(400).json({ error: activityIdError });
     }
 
     const dayError = validateDay(day);
@@ -111,6 +116,11 @@ router.post('/cards', (req: Request, res: Response) => {
       return res.status(400).json({
         error: 'Debe indicar week_id o week (YYYY-MM-DD del lunes de la semana)',
       });
+    }
+
+    const activityExists = db.prepare('SELECT id FROM activities WHERE id = ?').get(activity_id);
+    if (!activityExists) {
+      return res.status(400).json({ error: 'activity_id no corresponde a ninguna actividad existente' });
     }
 
     const stmt = db.prepare('INSERT INTO cards (activity_id, week_id, day) VALUES (?, ?, ?)');

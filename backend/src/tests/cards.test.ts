@@ -79,6 +79,42 @@ describe('POST /api/cards', () => {
 
     expect(res.status).toBe(400);
   });
+
+  it('devuelve 400 si activity_id es un string no numérico ("abc")', async () => {
+    const res = await request(app)
+      .post('/api/cards')
+      .send({ activity_id: 'abc', week: '2026-05-18', day: 'monday' });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe('activity_id debe ser un entero positivo');
+  });
+
+  it('devuelve 400 si activity_id es negativo (-1)', async () => {
+    const res = await request(app)
+      .post('/api/cards')
+      .send({ activity_id: -1, week: '2026-05-18', day: 'monday' });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe('activity_id debe ser un entero positivo');
+  });
+
+  it('devuelve 400 si activity_id es decimal (1.5)', async () => {
+    const res = await request(app)
+      .post('/api/cards')
+      .send({ activity_id: 1.5, week: '2026-05-18', day: 'monday' });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe('activity_id debe ser un entero positivo');
+  });
+
+  it('devuelve 400 si activity_id es numéricamente válido pero inexistente', async () => {
+    const res = await request(app)
+      .post('/api/cards')
+      .send({ activity_id: 99999, week: '2026-05-18', day: 'monday' });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe('activity_id no corresponde a ninguna actividad existente');
+  });
 });
 
 describe('PATCH /api/cards/:id/complete', () => {

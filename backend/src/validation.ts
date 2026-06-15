@@ -141,3 +141,19 @@ export function validateNumericId(id: unknown): string | null {
   }
   return null;
 }
+
+export function validatePositiveIntegerId(value: unknown): string | null {
+  if (typeof value === 'number') {
+    if (!Number.isInteger(value) || value <= 0) {
+      return 'activity_id debe ser un entero positivo';
+    }
+    return null;
+  }
+  if (typeof value === 'string') {
+    if (!/^\d+$/.test(value) || Number(value) === 0) {
+      return 'activity_id debe ser un entero positivo';
+    }
+    return null;
+  }
+  return 'activity_id debe ser un entero positivo';
+}
