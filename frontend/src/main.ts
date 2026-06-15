@@ -1,5 +1,5 @@
 // Constantes y tipos globales
-import { API_BASE } from './config';
+import { API_BASE } from './config.js';
 
 const DAY_KEYS = [
   'monday',
