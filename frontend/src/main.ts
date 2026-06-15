@@ -1,5 +1,5 @@
 // Constantes y tipos globales
-const API_BASE = 'http://localhost:3000/api';
+import { API_BASE } from './config';
 
 const DAY_KEYS = [
   'monday',
