@@ -219,6 +219,10 @@ router.patch('/cards/:id/timer/start', (req: Request, res: Response) => {
       return res.status(404).json({ error: 'Card no encontrada' });
     }
 
+    if (card.timer_running === 1) {
+      return res.status(400).json({ error: 'El cronómetro ya está en ejecución' });
+    }
+
     if (card.duration_seconds === null) {
       return res.status(400).json({
         error: 'Debe configurar la duración antes de iniciar el cronómetro',

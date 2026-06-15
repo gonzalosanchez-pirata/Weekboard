@@ -53,6 +53,60 @@ describe('POST /api/activities', () => {
 
     expect(res.status).toBe(400);
   });
+
+  it('devuelve 400 si el nombre tiene 101 caracteres', async () => {
+    const res = await request(app)
+      .post('/api/activities')
+      .send({ name: 'a'.repeat(101), color: '#ff0000', days: ['monday'] });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe('name debe tener entre 1 y 100 caracteres');
+  });
+
+  it('crea la actividad si el nombre tiene exactamente 100 caracteres', async () => {
+    const res = await request(app)
+      .post('/api/activities')
+      .send({ name: 'a'.repeat(100), color: '#ff0000', days: ['monday'] });
+
+    expect(res.status).toBe(201);
+    expect(res.body.name).toHaveLength(100);
+  });
+});
+
+describe('PUT /api/activities/:id', () => {
+  it('actualiza una actividad existente', async () => {
+    const result = db.prepare('INSERT INTO activities (name, color, days) VALUES (?, ?, ?)')
+      .run('Original', '#000000', JSON.stringify(['monday']));
+
+    const res = await request(app)
+      .put(`/api/activities/${result.lastInsertRowid}`)
+      .send({ name: 'Actualizado', color: '#ffffff', days: ['tuesday'] });
+
+    expect(res.status).toBe(200);
+    expect(res.body.name).toBe('Actualizado');
+    expect(res.body.color).toBe('#ffffff');
+    expect(res.body.days).toEqual(['tuesday']);
+  });
+
+  it('devuelve 404 si la actividad no existe', async () => {
+    const res = await request(app)
+      .put('/api/activities/99999')
+      .send({ name: 'Actualizado', color: '#ffffff', days: ['tuesday'] });
+
+    expect(res.status).toBe(404);
+    expect(res.body.error).toBe('Actividad no encontrada');
+  });
+
+  it('devuelve 400 si el body es inválido', async () => {
+    const result = db.prepare('INSERT INTO activities (name, color, days) VALUES (?, ?, ?)')
+      .run('Original', '#000000', JSON.stringify(['monday']));
+
+    const res = await request(app)
+      .put(`/api/activities/${result.lastInsertRowid}`)
+      .send({ name: 'Actualizado', color: '#ffffff', days: ['funday'] }); // día inválido
+
+    expect(res.status).toBe(400);
+  });
 });
 
 describe('DELETE /api/activities/:id', () => {

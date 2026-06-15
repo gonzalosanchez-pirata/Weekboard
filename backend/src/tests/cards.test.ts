@@ -222,6 +222,19 @@ describe('PATCH /api/cards/:id/timer/start', () => {
     expect(res.body.last_started_at).toBeTruthy();
   });
 
+  it('devuelve 400 si el cronómetro ya está en ejecución', async () => {
+    const card = createCard();
+    const id = card.lastInsertRowid;
+
+    await request(app).patch(`/api/cards/${id}/duration`).send({ duration_seconds: 300 });
+    await request(app).patch(`/api/cards/${id}/timer/start`); // Primer start (ok)
+
+    const res = await request(app).patch(`/api/cards/${id}/timer/start`); // Segundo start
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe('El cronómetro ya está en ejecución');
+  });
+
   it('devuelve 400 si no hay duración configurada', async () => {
     const card = createCard();
 

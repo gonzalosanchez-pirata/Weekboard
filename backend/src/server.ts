@@ -49,4 +49,12 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok' });
 });
 
+// Manejo global de errores (ej. CORS)
+app.use((err: Error, req: express.Request, res: express.Response, next: express.NextFunction) => {
+  if (err.message && err.message.startsWith('CORS:')) {
+    return res.status(403).json({ error: 'Origen no permitido' });
+  }
+  res.status(500).json({ error: 'Error interno del servidor' });
+});
+
 export default app;
