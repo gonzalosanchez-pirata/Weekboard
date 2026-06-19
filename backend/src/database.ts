@@ -52,6 +52,7 @@ ensureColumn('cards', 'duration_seconds', 'INTEGER NULL');
 ensureColumn('cards', 'remaining_seconds', 'INTEGER NULL');
 ensureColumn('cards', 'timer_running', 'INTEGER DEFAULT 0');
 ensureColumn('cards', 'last_started_at', 'TEXT NULL');
+ensureColumn('weeks', 'planned', 'INTEGER DEFAULT 0');
 
 // Migración: elimina filas duplicadas en weeks (mismo start_date) y reasigna
 // las cards que apuntaban a las filas duplicadas hacia la fila canónica (id mínimo).
@@ -92,6 +93,10 @@ deduplicateWeeks();
 // ya fue creada sin UNIQUE). Para bases nuevas, el UNIQUE inline del CREATE TABLE
 // ya lo cubre, por lo que este índice es redundante pero inofensivo.
 db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_weeks_start_date ON weeks(start_date)');
+
+// Garantiza que no haya cards duplicadas para la misma actividad, semana y día.
+// Esto permite usar INSERT OR IGNORE de forma segura en la planificación semanal.
+db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_cards_activity_week_day ON cards(activity_id, week_id, day)');
 
 console.log('Base de datos inicializada: tablas verificadas o creadas.');
 

@@ -5,6 +5,7 @@ import rateLimit from 'express-rate-limit';
 import './database';
 import activitiesRouter from './routes/activities';
 import cardsRouter from './routes/cards';
+import weeksRouter from './routes/weeks';
 
 const app = express();
 
@@ -43,6 +44,7 @@ app.use('/api', limiter);
 // Registro de rutas
 app.use('/api', activitiesRouter);
 app.use('/api', cardsRouter);
+app.use('/api', weeksRouter);
 
 // Health check
 app.get('/api/health', (req, res) => {

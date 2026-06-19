@@ -187,6 +187,18 @@ async function resetTimer(cardId: number): Promise<CardTimerState> {
   return apiFetch<CardTimerState>(`${API_BASE}/cards/${cardId}/timer/reset`, { method: 'PATCH' });
 }
 
+async function checkWeekPlanned(week: string): Promise<{ planned: boolean }> {
+  return apiFetch<{ planned: boolean }>(`${API_BASE}/weeks/planned?week=${encodeURIComponent(week)}`);
+}
+
+async function planWeek(week: string): Promise<{ ok: boolean }> {
+  return apiFetch<{ ok: boolean }>(`${API_BASE}/weeks/plan`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ week }),
+  });
+}
+
 // Gestión del estado de la interfaz
 function buildCardViews(activities: Activity[], rawCards: Card[]): CardView[] {
   const activityMap = new Map(activities.map((a) => [a.id, a]));
@@ -905,6 +917,115 @@ appEl.addEventListener('focusout', (event) => {
   }
 });
 
+// Sunday Planning Screen
+function showSundayOverlay(weekStr: string): void {
+  let strikeCount = 0;
+
+  const overlay = document.createElement('div');
+  overlay.id = 'sunday-overlay';
+
+  const card = document.createElement('div');
+  card.className = 'sunday-card';
+
+  const icon = document.createElement('div');
+  icon.className = 'sunday-card__icon';
+  icon.textContent = '📋';
+
+  const title = document.createElement('h1');
+  title.className = 'sunday-card__title';
+  title.textContent = 'Planificá tu semana';
+
+  const subtitle = document.createElement('p');
+  subtitle.className = 'sunday-card__subtitle';
+  subtitle.textContent = 'Es domingo. Antes de ver el tablero, confirmá tus actividades para la semana que viene.';
+
+  const weekBadge = document.createElement('span');
+  weekBadge.className = 'sunday-card__week';
+  weekBadge.textContent = `Semana del ${weekStr}`;
+
+  const actions = document.createElement('div');
+  actions.className = 'sunday-card__actions';
+
+  const confirmBtn = document.createElement('button');
+  confirmBtn.type = 'button';
+  confirmBtn.id = 'sunday-confirm';
+  confirmBtn.textContent = 'Confirmar semana';
+
+  const skipBtn = document.createElement('button');
+  skipBtn.type = 'button';
+  skipBtn.id = 'sunday-skip';
+  skipBtn.textContent = 'Ahora no';
+
+  const warning = document.createElement('div');
+  warning.id = 'sunday-warning';
+  warning.textContent = 'NO LO VAS A HACER DESPUÉS';
+
+  actions.append(confirmBtn, skipBtn, warning);
+  card.append(icon, title, subtitle, weekBadge, actions);
+  overlay.append(card);
+  appEl.append(overlay);
+
+  // Confirmar semana
+  confirmBtn.addEventListener('click', () => {
+    confirmBtn.disabled = true;
+    confirmBtn.textContent = 'Confirmando…';
+    planWeek(weekStr)
+      .then(() => {
+        overlay.remove();
+        requestNotificationPermissionOnce();
+        void loadWeek();
+      })
+      .catch((err) => {
+        confirmBtn.disabled = false;
+        confirmBtn.textContent = 'Confirmar semana';
+        const msg = err instanceof Error ? err.message : 'Error al planificar';
+        warning.textContent = msg;
+        warning.classList.add('sunday-warning--visible');
+      });
+  });
+
+  // Ahora no — flujo de 3 strikes
+  skipBtn.addEventListener('click', () => {
+    strikeCount += 1;
+
+    if (strikeCount === 1) {
+      // Strike 1: mostrar advertencia
+      warning.textContent = 'NO LO VAS A HACER DESPUÉS';
+      warning.classList.remove('sunday-warning--shake');
+      warning.classList.add('sunday-warning--visible');
+    } else if (strikeCount === 2) {
+      // Strike 2: zarandeo agresivo — forzar reflow para reiniciar la animación
+      warning.classList.remove('sunday-warning--shake');
+      void warning.offsetWidth; // trigger reflow
+      warning.classList.add('sunday-warning--shake');
+    } else {
+      // Strike 3: desbloquear sin planificar
+      overlay.remove();
+      requestNotificationPermissionOnce();
+      void loadWeek();
+    }
+  });
+}
+
 // Inicialización de la aplicación
-requestNotificationPermissionOnce();
-void loadWeek();
+async function init(): Promise<void> {
+  const today = new Date();
+  if (today.getDay() === 0) {
+    // Es domingo: verificar si la semana siguiente ya fue planificada
+    const nextMonday = addDays(today, 1);
+    const weekStr = toWeekParam(nextMonday);
+    try {
+      const { planned } = await checkWeekPlanned(weekStr);
+      if (!planned) {
+        showSundayOverlay(weekStr);
+        return;
+      }
+    } catch {
+      // Si hay error al verificar, se accede al tablero directamente
+    }
+  }
+  requestNotificationPermissionOnce();
+  void loadWeek();
+}
+
+void init();
