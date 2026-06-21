@@ -971,6 +971,8 @@ function showSundayOverlay(weekStr: string): void {
     confirmBtn.textContent = 'Confirmando…';
     planWeek(weekStr)
       .then(() => {
+        const [y, m, d] = weekStr.split('-').map(Number);
+        currentMonday = new Date(y, m - 1, d);
         overlay.remove();
         requestNotificationPermissionOnce();
         void loadWeek();
@@ -1000,6 +1002,8 @@ function showSundayOverlay(weekStr: string): void {
       warning.classList.add('sunday-warning--shake');
     } else {
       // Strike 3: desbloquear sin planificar
+      const [y, m, d] = weekStr.split('-').map(Number);
+      currentMonday = new Date(y, m - 1, d);
       overlay.remove();
       requestNotificationPermissionOnce();
       void loadWeek();
