@@ -199,6 +199,35 @@ async function planWeek(week: string): Promise<{ ok: boolean }> {
   });
 }
 
+async function fetchPreviousWeek(before: string): Promise<{ week: string | null }> {
+  return apiFetch<{ week: string | null }>(
+    `${API_BASE}/weeks/previous?before=${encodeURIComponent(before)}`
+  );
+}
+
+async function confirmWeek(week: string): Promise<{ ok: boolean }> {
+  return apiFetch<{ ok: boolean }>(`${API_BASE}/weeks/confirm`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ week }),
+  });
+}
+
+async function copyWeek(sourceWeek: string, targetWeek: string): Promise<{ ok: boolean }> {
+  return apiFetch<{ ok: boolean }>(`${API_BASE}/weeks/copy`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ sourceWeek, targetWeek }),
+  });
+}
+
+async function deleteWeekCards(week: string): Promise<{ ok: boolean }> {
+  return apiFetch<{ ok: boolean }>(
+    `${API_BASE}/weeks/cards?week=${encodeURIComponent(week)}`,
+    { method: 'DELETE' }
+  );
+}
+
 // Gestión del estado de la interfaz
 function buildCardViews(activities: Activity[], rawCards: Card[]): CardView[] {
   const activityMap = new Map(activities.map((a) => [a.id, a]));
@@ -284,7 +313,7 @@ async function onTick(): Promise<void> {
       }
     }
   }
-  
+
   for (const card of cards) {
     if (card.timer_running === 1 && (card.duration_seconds ?? 0) > 0) {
       const ratio = getProgressRatio(card, nowMs);
@@ -917,6 +946,241 @@ appEl.addEventListener('focusout', (event) => {
   }
 });
 
+// Sunday Planning Screen — Planning Mode helpers
+
+/**
+ * Renderiza una card simplificada para el Planning Mode.
+ * Sin checkbox en el DOM, sin barra de progreso, sin timer.
+ * Solo nombre y botón de eliminar.
+ */
+function renderPlanningCard(card: CardView): HTMLElement {
+  const cardEl = createElement('div', 'card planning-card');
+  cardEl.dataset.cardId = String(card.id);
+  cardEl.style.borderLeftColor = card.color;
+
+  const nameEl = createElement('span', 'card__name', card.name);
+
+  const deleteBtn = createElement('button', 'card__delete', '×');
+  deleteBtn.type = 'button';
+  deleteBtn.setAttribute('aria-label', `Eliminar ${card.name}`);
+
+  cardEl.append(nameEl, deleteBtn);
+  return cardEl;
+}
+
+/**
+ * Renderiza una columna de día para el Planning Mode.
+ * Usa las planningCards del Planning Mode (no las cards globales del tablero),
+ * el formulario crea cards en la semana de planificación.
+ */
+function renderPlanningDayColumn(
+  dayKey: DayKey,
+  planningWeekStr: string,
+  planningCards: CardView[],
+  planningMonday: Date
+): HTMLElement {
+  const column = createElement('div', 'day-column planning-day-column');
+  column.dataset.day = dayKey;
+
+  const dayDate = getDateForDay(planningMonday, dayKey);
+  const header = createElement('div', 'day-column__header');
+  const dayName = createElement('span', 'day-column__name', DAY_LABELS[dayKey]);
+  const dayNumber = createElement('span', 'day-column__date', String(dayDate.getDate()));
+  header.append(dayName, dayNumber);
+
+  const cardsContainer = createElement('div', 'day-column__cards');
+  const dayCards = planningCards.filter((c) => c.day === dayKey);
+  for (const card of dayCards) {
+    cardsContainer.append(renderPlanningCard(card));
+  }
+
+  const form = document.createElement('form');
+  form.className = 'day-column__form planning-day-form';
+  form.dataset.day = dayKey;
+  form.dataset.week = planningWeekStr;
+
+  const nameInput = document.createElement('input');
+  nameInput.type = 'text';
+  nameInput.className = 'day-column__input-name';
+  nameInput.placeholder = 'Nueva actividad';
+  nameInput.required = true;
+
+  const colorInput = document.createElement('input');
+  colorInput.type = 'color';
+  colorInput.className = 'day-column__input-color';
+  colorInput.value = '#6366f1';
+
+  const submitBtn = createElement('button', 'day-column__submit', 'Añadir');
+  submitBtn.type = 'submit';
+
+  form.append(nameInput, colorInput, submitBtn);
+  column.append(header, cardsContainer, form);
+  return column;
+}
+
+/**
+ * Muestra el Planning Mode: overlay de pantalla completa con un tablero simplificado
+ * donde el usuario puede agregar/eliminar cards para la semana de planificación.
+ * Botones: "Resetear" (borra cards de la semana) y "Confirmar" (marca como planificada y cierra).
+ */
+function showPlanningMode(weekStr: string, overlay: HTMLElement): void {
+  const [y, m, d] = weekStr.split('-').map(Number);
+  const planningMonday = new Date(y, m - 1, d);
+  let planningCards: CardView[] = [];
+
+  const planningOverlay = document.createElement('div');
+  planningOverlay.id = 'planning-mode-overlay';
+
+  // Header del Planning Mode
+  const pmHeader = createElement('div', 'planning-mode__header');
+  const pmTitle = createElement('h1', 'planning-mode__title', '📋 Planificando semana');
+  const pmSubtitle = createElement('p', 'planning-mode__subtitle',
+    `Agregá o quitá actividades para la semana del ${weekStr}. Cuando estés listo, confirmá.`);
+
+  const pmActions = createElement('div', 'planning-mode__actions');
+
+  const resetBtn = createElement('button', 'planning-mode__btn planning-mode__btn--danger', '🗑 Resetear semana');
+  resetBtn.type = 'button';
+  resetBtn.id = 'planning-reset';
+
+  const confirmBtn = createElement('button', 'planning-mode__btn planning-mode__btn--confirm', '✓ Confirmar semana');
+  confirmBtn.type = 'button';
+  confirmBtn.id = 'planning-confirm';
+
+  const statusMsg = createElement('span', 'planning-mode__status', '');
+  statusMsg.id = 'planning-status';
+
+  pmActions.append(resetBtn, confirmBtn, statusMsg);
+  pmHeader.append(pmTitle, pmSubtitle, pmActions);
+
+  // Grid de columnas de días
+  const pmGrid = createElement('div', 'planning-mode__grid');
+
+  function rebuildGrid(): void {
+    pmGrid.replaceChildren();
+    for (const dayKey of DAY_KEYS) {
+      pmGrid.append(renderPlanningDayColumn(dayKey, weekStr, planningCards, planningMonday));
+    }
+  }
+
+  async function loadPlanningCards(): Promise<void> {
+    statusMsg.textContent = 'Cargando…';
+    try {
+      const [activities, rawCards] = await Promise.all([
+        fetchActivities(),
+        fetchCards(weekStr),
+      ]);
+      planningCards = buildCardViews(activities, rawCards);
+      statusMsg.textContent = '';
+    } catch {
+      statusMsg.textContent = 'Error al cargar cards';
+    }
+    rebuildGrid();
+  }
+
+  planningOverlay.append(pmHeader, pmGrid);
+  appEl.append(planningOverlay);
+
+  // Delegación de eventos dentro del Planning Mode
+
+  planningOverlay.addEventListener('click', async (event) => {
+    event.stopPropagation();
+    const target = event.target;
+    if (!(target instanceof HTMLElement)) return;
+
+    // Eliminar card
+    if (target.classList.contains('card__delete')) {
+      const cardEl = target.closest<HTMLElement>('.planning-card');
+      if (!cardEl?.dataset.cardId) return;
+      const cardId = Number(cardEl.dataset.cardId);
+      statusMsg.textContent = 'Eliminando…';
+      try {
+        await deleteCard(cardId);
+        planningCards = planningCards.filter((c) => c.id !== cardId);
+        statusMsg.textContent = '';
+        rebuildGrid();
+      } catch {
+        statusMsg.textContent = 'Error al eliminar';
+      }
+      return;
+    }
+
+    // Resetear: borrar todas las cards de la semana
+    if (target.id === 'planning-reset') {
+      resetBtn.disabled = true;
+      statusMsg.textContent = 'Reseteando…';
+      try {
+        await deleteWeekCards(weekStr);
+        planningCards = [];
+        statusMsg.textContent = '';
+        rebuildGrid();
+      } catch {
+        statusMsg.textContent = 'Error al resetear';
+      } finally {
+        resetBtn.disabled = false;
+      }
+      return;
+    }
+
+    // Confirmar: marcar la semana como planificada y cerrar Planning Mode
+    if (target.id === 'planning-confirm') {
+      confirmBtn.disabled = true;
+      confirmBtn.textContent = '⏳ Confirmando…';
+      statusMsg.textContent = '';
+      try {
+        await confirmWeek(weekStr);
+        planningOverlay.remove();
+        overlay.remove();
+        currentMonday = planningMonday;
+        requestNotificationPermissionOnce();
+        void loadWeek();
+      } catch {
+        confirmBtn.disabled = false;
+        confirmBtn.textContent = '✓ Confirmar semana';
+        statusMsg.textContent = 'Error al confirmar';
+      }
+      return;
+    }
+  });
+
+  // Formulario para agregar cards desde el Planning Mode
+  planningOverlay.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    const form = event.target;
+    if (!(form instanceof HTMLFormElement) || !form.classList.contains('planning-day-form')) return;
+
+    const day = form.dataset.day;
+    if (!day || !isDayKey(day)) return;
+
+    const nameInput = form.querySelector<HTMLInputElement>('.day-column__input-name');
+    const colorInput = form.querySelector<HTMLInputElement>('.day-column__input-color');
+    if (!nameInput || !colorInput) return;
+
+    const name = nameInput.value.trim();
+    if (!name) return;
+
+    statusMsg.textContent = 'Añadiendo…';
+    try {
+      const activity = await createActivity(name, colorInput.value, day);
+      const newCard = await createCard(activity.id, weekStr, day);
+      // Rebuild the planning cards from the API to keep in sync
+      const [activities, rawCards] = await Promise.all([fetchActivities(), fetchCards(weekStr)]);
+      planningCards = buildCardViews(activities, rawCards);
+      // Suppress the new card from loadWeek's global state
+      void newCard; // used for API side-effects, we re-fetch above
+      statusMsg.textContent = '';
+      form.reset();
+      colorInput.value = '#6366f1';
+      rebuildGrid();
+    } catch {
+      statusMsg.textContent = 'Error al añadir';
+    }
+  });
+
+  void loadPlanningCards();
+}
+
 // Sunday Planning Screen
 function showSundayOverlay(weekStr: string): void {
   let strikeCount = 0;
@@ -937,19 +1201,27 @@ function showSundayOverlay(weekStr: string): void {
 
   const subtitle = document.createElement('p');
   subtitle.className = 'sunday-card__subtitle';
-  subtitle.textContent = 'Es domingo. Antes de ver el tablero, confirmá tus actividades para la semana que viene.';
+  subtitle.textContent =
+    'Es domingo. Antes de ver el tablero, configurá las actividades para la semana que viene.';
 
   const weekBadge = document.createElement('span');
   weekBadge.className = 'sunday-card__week';
   weekBadge.textContent = `Semana del ${weekStr}`;
 
-  const actions = document.createElement('div');
-  actions.className = 'sunday-card__actions';
+  // Botón principal: abrir Planning Mode (desde cero)
+  const planFromScratchBtn = document.createElement('button');
+  planFromScratchBtn.type = 'button';
+  planFromScratchBtn.id = 'sunday-plan-scratch';
+  planFromScratchBtn.className = 'sunday-btn sunday-btn--primary';
+  planFromScratchBtn.textContent = '📝 Planificar desde cero';
 
-  const confirmBtn = document.createElement('button');
-  confirmBtn.type = 'button';
-  confirmBtn.id = 'sunday-confirm';
-  confirmBtn.textContent = 'Confirmar semana';
+  // Botón secundario: usar semana anterior (se muestra solo si existe)
+  const usePrevBtn = document.createElement('button');
+  usePrevBtn.type = 'button';
+  usePrevBtn.id = 'sunday-use-prev';
+  usePrevBtn.className = 'sunday-btn sunday-btn--secondary';
+  usePrevBtn.textContent = '📅 Usar semana anterior';
+  usePrevBtn.style.display = 'none';
 
   const skipBtn = document.createElement('button');
   skipBtn.type = 'button';
@@ -960,28 +1232,48 @@ function showSundayOverlay(weekStr: string): void {
   warning.id = 'sunday-warning';
   warning.textContent = 'NO LO VAS A HACER DESPUÉS';
 
-  actions.append(confirmBtn, skipBtn, warning);
+  const actions = document.createElement('div');
+  actions.className = 'sunday-card__actions';
+  actions.append(planFromScratchBtn, usePrevBtn, skipBtn, warning);
+
   card.append(icon, title, subtitle, weekBadge, actions);
   overlay.append(card);
   appEl.append(overlay);
 
-  // Confirmar semana
-  confirmBtn.addEventListener('click', () => {
-    confirmBtn.disabled = true;
-    confirmBtn.textContent = 'Confirmando…';
-    planWeek(weekStr)
+  // Verificar si existe una semana anterior planificada para habilitar el botón
+  fetchPreviousWeek(weekStr)
+    .then(({ week: prevWeek }) => {
+      if (prevWeek) {
+        usePrevBtn.dataset.prevWeek = prevWeek;
+        usePrevBtn.style.display = '';
+        usePrevBtn.textContent = `📅 Usar semana del ${prevWeek}`;
+      }
+    })
+    .catch(() => {
+      // Si falla, simplemente no mostramos el botón de semana anterior
+    });
+
+  // Planificar desde cero: abrir Planning Mode sin copiar nada
+  planFromScratchBtn.addEventListener('click', () => {
+    showPlanningMode(weekStr, overlay);
+  });
+
+  // Usar semana anterior: copiar cards y luego abrir Planning Mode
+  usePrevBtn.addEventListener('click', () => {
+    const prevWeek = usePrevBtn.dataset.prevWeek;
+    if (!prevWeek) return;
+
+    usePrevBtn.disabled = true;
+    usePrevBtn.textContent = '⏳ Copiando…';
+
+    copyWeek(prevWeek, weekStr)
       .then(() => {
-        const [y, m, d] = weekStr.split('-').map(Number);
-        currentMonday = new Date(y, m - 1, d);
-        overlay.remove();
-        requestNotificationPermissionOnce();
-        void loadWeek();
+        showPlanningMode(weekStr, overlay);
       })
-      .catch((err) => {
-        confirmBtn.disabled = false;
-        confirmBtn.textContent = 'Confirmar semana';
-        const msg = err instanceof Error ? err.message : 'Error al planificar';
-        warning.textContent = msg;
+      .catch(() => {
+        usePrevBtn.disabled = false;
+        usePrevBtn.textContent = `📅 Usar semana del ${prevWeek}`;
+        warning.textContent = 'Error al copiar la semana anterior';
         warning.classList.add('sunday-warning--visible');
       });
   });
@@ -1001,9 +1293,9 @@ function showSundayOverlay(weekStr: string): void {
       void warning.offsetWidth; // trigger reflow
       warning.classList.add('sunday-warning--shake');
     } else {
-      // Strike 3: desbloquear sin planificar
-      const [y, m, d] = weekStr.split('-').map(Number);
-      currentMonday = new Date(y, m - 1, d);
+      // Strike 3: desbloquear sin planificar — semana vacía
+      const [yr, mo, dy] = weekStr.split('-').map(Number);
+      currentMonday = new Date(yr, mo - 1, dy);
       overlay.remove();
       requestNotificationPermissionOnce();
       void loadWeek();
@@ -1014,10 +1306,15 @@ function showSundayOverlay(weekStr: string): void {
 // Inicialización de la aplicación
 async function init(): Promise<void> {
   const today = new Date();
-  if (today.getDay() === 0) {
+  const forceSunday = new URLSearchParams(window.location.search).has('sunday');
+  if (forceSunday || today.getDay() === 0) {
     // Es domingo: verificar si la semana siguiente ya fue planificada
-    const nextMonday = addDays(today, 1);
+    const nextMonday = addDays(currentMonday, 7);
     const weekStr = toWeekParam(nextMonday);
+    if (forceSunday) {
+      showSundayOverlay(weekStr);
+      return;
+    }
     try {
       const { planned } = await checkWeekPlanned(weekStr);
       if (!planned) {
