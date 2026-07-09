@@ -1304,6 +1304,13 @@ function showSundayOverlay(weekStr: string): void {
 }
 
 // Inicialización de la aplicación
+// DEV ONLY: ?sunday fuerza la simulación de domingo para testing manual.
+// BUG CONOCIDO: si se usa un día que no es domingo, nextMonday se calcula
+// mal (ver línea siguiente) porque currentMonday se ancla a la fecha real
+// del sistema, no a un domingo simulado. No se corrige porque ?sunday
+// es una herramienta de desarrollo, no una feature del producto, y
+// desaparecerá antes del release. Si necesitás testear el flujo, usarlo
+// en domingo real o mockear Date directamente en un test.
 async function init(): Promise<void> {
   const today = new Date();
   const forceSunday = new URLSearchParams(window.location.search).has('sunday');
