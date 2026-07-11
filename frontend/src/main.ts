@@ -1050,6 +1050,22 @@ function showPlanningMode(weekStr: string, overlay: HTMLElement): void {
   const statusMsg = createElement('span', 'planning-mode__status', '');
   statusMsg.id = 'planning-status';
 
+  // [SEC-2] Auditoría: dialog de confirmación nativo para la acción destructiva de reset.
+  // Se crea una sola vez y se reutiliza en cada clic (sin dependencias externas).
+  const resetDialog = document.createElement('dialog');
+  resetDialog.className = 'planning-reset-dialog';
+  resetDialog.innerHTML = `
+    <p class="planning-reset-dialog__msg">¿Resetear semana?</p>
+    <div class="planning-reset-dialog__actions">
+      <button type="button" id="planning-reset-cancel" class="planning-mode__btn planning-mode__btn--cancel">No</button>
+      <button type="button" id="planning-reset-confirm" class="planning-mode__btn planning-mode__btn--danger">Sí</button>
+    </div>
+  `;
+  resetDialog.querySelector('#planning-reset-cancel')!.addEventListener('click', () => {
+    resetDialog.close();
+  });
+  planningOverlay.append(resetDialog);
+
   pmActions.append(resetBtn, confirmBtn, statusMsg);
   pmHeader.append(pmTitle, pmSubtitle, pmActions);
 
@@ -1061,6 +1077,7 @@ function showPlanningMode(weekStr: string, overlay: HTMLElement): void {
     for (const dayKey of DAY_KEYS) {
       pmGrid.append(renderPlanningDayColumn(dayKey, weekStr, planningCards, planningMonday));
     }
+    syncConfirmBtn();
   }
 
   async function loadPlanningCards(): Promise<void> {
@@ -1080,6 +1097,15 @@ function showPlanningMode(weekStr: string, overlay: HTMLElement): void {
 
   planningOverlay.append(pmHeader, pmGrid);
   appEl.append(planningOverlay);
+
+  // [SEC-3/frontend] Sincroniza el estado del botón Confirmar según si hay cards.
+  // Deshabilitar confirmar cuando no hay cards cierra el agujero donde el usuario
+  // podía eludir el sistema de 3 strikes confirmando una semana vacía.
+  function syncConfirmBtn(): void {
+    const hasCards = planningCards.length > 0;
+    confirmBtn.disabled = !hasCards;
+    confirmBtn.title = hasCards ? '' : 'Agregá al menos una actividad para poder confirmar';
+  }
 
   // Delegación de eventos dentro del Planning Mode
 
@@ -1107,6 +1133,14 @@ function showPlanningMode(weekStr: string, overlay: HTMLElement): void {
 
     // Resetear: borrar todas las cards de la semana
     if (target.id === 'planning-reset') {
+      // [SEC-2] Auditoría: confirmar antes de ejecutar la acción destructiva.
+      resetDialog.showModal();
+      return;
+    }
+
+    // Confirmación del dialog de reset
+    if (target.id === 'planning-reset-confirm') {
+      resetDialog.close();
       resetBtn.disabled = true;
       statusMsg.textContent = 'Reseteando…';
       try {

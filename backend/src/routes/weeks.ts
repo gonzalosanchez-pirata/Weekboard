@@ -125,6 +125,10 @@ router.get('/weeks/previous', (req: Request, res: Response) => {
 });
 
 // PATCH /weeks/confirm — marca la semana como planificada (sin crear cards)
+// [SEC-3] Auditoría: rechazar confirmación si la semana no tiene cards asociadas.
+// Confirmar una semana vacía no tiene sentido de negocio y cerraba el agujero
+// donde "Planificar desde cero" + "Confirmar" sin agregar nada eludía el sistema
+// de 3 strikes del botón de skip.
 router.patch('/weeks/confirm', (req: Request, res: Response) => {
   try {
     const { week } = req.body as { week: unknown };
@@ -136,6 +140,23 @@ router.patch('/weeks/confirm', (req: Request, res: Response) => {
     const weekError = validateWeek(week);
     if (weekError) {
       return res.status(400).json({ error: weekError });
+    }
+
+    // Verificar que la semana tenga al menos una card antes de confirmar
+    const weekRow = db
+      .prepare('SELECT id FROM weeks WHERE start_date = ?')
+      .get(week) as { id: number } | undefined;
+
+    const cardCount = weekRow
+      ? (db
+          .prepare('SELECT COUNT(*) AS cnt FROM cards WHERE week_id = ?')
+          .get(weekRow.id) as { cnt: number }).cnt
+      : 0;
+
+    if (cardCount === 0) {
+      return res.status(400).json({
+        error: 'No se puede confirmar una semana sin cards. Agregá al menos una actividad antes de confirmar.',
+      });
     }
 
     const tx = db.transaction(() => {
@@ -197,6 +218,8 @@ router.patch('/weeks/copy', (req: Request, res: Response) => {
 });
 
 // DELETE /weeks/cards?week=YYYY-MM-DD — elimina todas las cards de la semana indicada
+// [SEC-1] Auditoría: solo se permite resetear si la semana tiene planned=0.
+// Una semana ya planificada es inmutable; responder 409 si planned=1.
 router.delete('/weeks/cards', (req: Request, res: Response) => {
   try {
     const weekQuery = req.query.week;
@@ -213,8 +236,14 @@ router.delete('/weeks/cards', (req: Request, res: Response) => {
 
     const tx = db.transaction(() => {
       const row = db
-        .prepare('SELECT id FROM weeks WHERE start_date = ?')
-        .get(weekParam) as { id: number } | undefined;
+        .prepare('SELECT id, planned FROM weeks WHERE start_date = ?')
+        .get(weekParam) as { id: number; planned: number } | undefined;
+
+      if (row && row.planned === 1) {
+        // Señal para el handler externo: no se puede resetear una semana planificada
+        throw Object.assign(new Error('WEEK_ALREADY_PLANNED'), { planned: true });
+      }
+
       if (row) {
         db.prepare('DELETE FROM cards WHERE week_id = ?').run(row.id);
       }
@@ -223,6 +252,11 @@ router.delete('/weeks/cards', (req: Request, res: Response) => {
 
     return res.json({ ok: true });
   } catch (error) {
+    if (error instanceof Error && (error as Error & { planned?: boolean }).planned) {
+      return res.status(409).json({
+        error: 'No se pueden eliminar las cards de una semana ya planificada.',
+      });
+    }
     console.error('Error al eliminar cards de la semana:', error);
     res.status(500).json({ error: 'Error al eliminar cards' });
   }

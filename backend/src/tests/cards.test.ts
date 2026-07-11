@@ -386,7 +386,8 @@ describe('Unicidad de weeks.start_date al crear cards vía POST /api/cards', () 
   it('dos cards con el mismo week resultan en una sola fila en weeks para ese start_date', async () => {
     const activityA = createActivity();
     const activityB = createActivity();
-    const weekDate = '2026-06-09';
+    // [SEC-4] La fecha debe ser lunes: 2026-06-08 es lunes (antes era 2026-06-09, martes)
+    const weekDate = '2026-06-08';
 
     await request(app)
       .post('/api/cards')
@@ -406,7 +407,8 @@ describe('Unicidad de weeks.start_date al crear cards vía POST /api/cards', () 
   it('ambas cards quedan asociadas al mismo week_id', async () => {
     const activityA = createActivity();
     const activityB = createActivity();
-    const weekDate = '2026-06-09';
+    // [SEC-4] La fecha debe ser lunes: 2026-06-08 es lunes (antes era 2026-06-09, martes)
+    const weekDate = '2026-06-08';
 
     const resA = await request(app)
       .post('/api/cards')

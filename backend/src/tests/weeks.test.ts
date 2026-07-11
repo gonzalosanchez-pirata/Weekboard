@@ -17,6 +17,14 @@ function createActivity(days = ['monday', 'wednesday', 'friday']) {
     .run('Test Activity', '#ff0000', JSON.stringify(days));
 }
 
+/** Crea una activity + card para la semana dada; precondición para PATCH /weeks/confirm. */
+function seedCardForWeek(weekStr: string): void {
+  db.prepare('INSERT OR IGNORE INTO weeks (start_date) VALUES (?)').run(weekStr);
+  const weekRow = db.prepare('SELECT id FROM weeks WHERE start_date = ?').get(weekStr) as { id: number };
+  const actResult = db.prepare('INSERT INTO activities (name, color, days) VALUES (?, ?, ?)').run('Seed Activity', '#aabbcc', '["monday"]');
+  db.prepare('INSERT INTO cards (activity_id, week_id, day) VALUES (?, ?, ?)').run(actResult.lastInsertRowid, weekRow.id, 'monday');
+}
+
 // ---------------------------------------------------------------------------
 // GET /api/weeks/planned
 // ---------------------------------------------------------------------------
@@ -238,7 +246,10 @@ describe('GET /api/weeks/previous', () => {
 // ---------------------------------------------------------------------------
 
 describe('PATCH /api/weeks/confirm', () => {
-  it('semana nueva: devuelve 200 { ok: true } e inserta con planned=1', async () => {
+  it('semana con cards: devuelve 200 { ok: true } e inserta con planned=1', async () => {
+    // [SEC-3] Se requiere al menos una card para poder confirmar
+    seedCardForWeek(VALID_WEEK);
+
     const res = await request(app).patch('/api/weeks/confirm').send({ week: VALID_WEEK });
     expect(res.status).toBe(200);
     expect(res.body).toEqual({ ok: true });
@@ -250,8 +261,12 @@ describe('PATCH /api/weeks/confirm', () => {
     expect(row.planned).toBe(1);
   });
 
-  it('semana preexistente: idempotente, devuelve 200 y planned sigue siendo 1', async () => {
+  it('semana preexistente con cards: idempotente, devuelve 200 y planned sigue siendo 1', async () => {
+    // [SEC-3] Misma regla: se necesita al menos una card
     db.prepare('INSERT INTO weeks (start_date, planned) VALUES (?, 0)').run(VALID_WEEK);
+    const weekRow = db.prepare('SELECT id FROM weeks WHERE start_date = ?').get(VALID_WEEK) as { id: number };
+    const actResult = db.prepare('INSERT INTO activities (name, color, days) VALUES (?, ?, ?)').run('Act', '#ff0000', '["monday"]');
+    db.prepare('INSERT INTO cards (activity_id, week_id, day) VALUES (?, ?, ?)').run(actResult.lastInsertRowid, weekRow.id, 'monday');
 
     const res = await request(app).patch('/api/weeks/confirm').send({ week: VALID_WEEK });
     expect(res.status).toBe(200);
@@ -263,7 +278,10 @@ describe('PATCH /api/weeks/confirm', () => {
     expect(row.planned).toBe(1);
   });
 
-  it('doble llamada no genera duplicados y sigue en planned=1', async () => {
+  it('doble llamada con cards no genera duplicados y sigue en planned=1', async () => {
+    // [SEC-3] Agregar card antes de ambas llamadas
+    seedCardForWeek(VALID_WEEK);
+
     await request(app).patch('/api/weeks/confirm').send({ week: VALID_WEEK });
     const res = await request(app).patch('/api/weeks/confirm').send({ week: VALID_WEEK });
     expect(res.status).toBe(200);
@@ -272,6 +290,20 @@ describe('PATCH /api/weeks/confirm', () => {
       .prepare('SELECT id FROM weeks WHERE start_date = ?')
       .all(VALID_WEEK) as { id: number }[];
     expect(rows.length).toBe(1);
+  });
+
+  it('[SEC-3] devuelve 400 si la semana no tiene cards asociadas', async () => {
+    // Caso explícito del fix de seguridad: semántica "sin cards = no confirmable"
+    const res = await request(app).patch('/api/weeks/confirm').send({ week: VALID_WEEK });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBeTruthy();
+  });
+
+  it('[SEC-3] devuelve 400 si la semana existe en DB pero sin cards', async () => {
+    db.prepare('INSERT INTO weeks (start_date, planned) VALUES (?, 0)').run(VALID_WEEK);
+    const res = await request(app).patch('/api/weeks/confirm').send({ week: VALID_WEEK });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBeTruthy();
   });
 
   it('devuelve 400 si falta el campo week', async () => {
@@ -436,6 +468,47 @@ describe('DELETE /api/weeks/cards', () => {
     expect(otherCount.cnt).toBe(1);
   });
 
+  it('[SEC-1] devuelve 409 si la semana ya está planificada (planned=1)', async () => {
+    // Una semana planificada es inmutable; el reset debe ser bloqueado.
+    db.prepare('INSERT INTO weeks (start_date, planned) VALUES (?, 1)').run(VALID_WEEK);
+    const weekId = (
+      db.prepare('SELECT id FROM weeks WHERE start_date = ?').get(VALID_WEEK) as { id: number }
+    ).id;
+    createActivity(['monday']);
+    const actId = (db.prepare('SELECT id FROM activities').get() as { id: number }).id;
+    db.prepare('INSERT INTO cards (activity_id, week_id, day) VALUES (?, ?, ?)').run(actId, weekId, 'monday');
+
+    const res = await request(app).delete(`/api/weeks/cards?week=${VALID_WEEK}`);
+    expect(res.status).toBe(409);
+    expect(res.body.error).toBeTruthy();
+
+    // Verificar que las cards siguen intactas
+    const remaining = db
+      .prepare('SELECT COUNT(*) AS cnt FROM cards WHERE week_id = ?')
+      .get(weekId) as { cnt: number };
+    expect(remaining.cnt).toBe(1);
+  });
+
+  it('[SEC-1] permite borrar cards si la semana tiene planned=0', async () => {
+    // Solo se bloquea cuando planned=1; planned=0 debe seguir funcionando.
+    db.prepare('INSERT INTO weeks (start_date, planned) VALUES (?, 0)').run(VALID_WEEK);
+    const weekId = (
+      db.prepare('SELECT id FROM weeks WHERE start_date = ?').get(VALID_WEEK) as { id: number }
+    ).id;
+    createActivity(['monday']);
+    const actId = (db.prepare('SELECT id FROM activities').get() as { id: number }).id;
+    db.prepare('INSERT INTO cards (activity_id, week_id, day) VALUES (?, ?, ?)').run(actId, weekId, 'monday');
+
+    const res = await request(app).delete(`/api/weeks/cards?week=${VALID_WEEK}`);
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ ok: true });
+
+    const remaining = db
+      .prepare('SELECT COUNT(*) AS cnt FROM cards WHERE week_id = ?')
+      .get(weekId) as { cnt: number };
+    expect(remaining.cnt).toBe(0);
+  });
+
   it('devuelve 400 si falta el parámetro week', async () => {
     const res = await request(app).delete('/api/weeks/cards');
     expect(res.status).toBe(400);
@@ -446,5 +519,31 @@ describe('DELETE /api/weeks/cards', () => {
     const res = await request(app).delete('/api/weeks/cards?week=invalid');
     expect(res.status).toBe(400);
     expect(res.body.error).toBeTruthy();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// validateWeek — validación de que la fecha sea un lunes [SEC-4]
+// ---------------------------------------------------------------------------
+
+describe('validateWeek — validación de lunes', () => {
+  it('[SEC-4] rechaza una fecha válida que no sea lunes (martes)', async () => {
+    // 2026-06-23 es martes
+    const res = await request(app).get('/api/weeks/planned?week=2026-06-23');
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/lunes/i);
+  });
+
+  it('[SEC-4] rechaza una fecha válida que no sea lunes (sábado)', async () => {
+    // 2026-06-27 es sábado
+    const res = await request(app).get('/api/weeks/planned?week=2026-06-27');
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/lunes/i);
+  });
+
+  it('[SEC-4] acepta una fecha que sí es lunes', async () => {
+    // VALID_WEEK = 2026-06-22 es lunes
+    const res = await request(app).get(`/api/weeks/planned?week=${VALID_WEEK}`);
+    expect(res.status).toBe(200);
   });
 });

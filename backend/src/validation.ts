@@ -80,6 +80,11 @@ export function validateWeek(week: unknown): string | null {
   if (`${y}-${m}-${d}` !== week) {
     return 'week debe tener formato YYYY-MM-DD válido';
   }
+  // [SEC-4] Auditoría: el modelo de datos asume semanas ancladas a lunes;
+  // rechazar cualquier fecha que no sea lunes (getDay() === 1).
+  if (date.getDay() !== 1) {
+    return 'week debe corresponder a un lunes (inicio de semana)';
+  }
   return null;
 }
 
