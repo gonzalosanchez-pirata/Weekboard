@@ -1055,7 +1055,7 @@ function showPlanningMode(weekStr: string, overlay: HTMLElement): void {
   const resetDialog = document.createElement('dialog');
   resetDialog.className = 'planning-reset-dialog';
   resetDialog.innerHTML = `
-    <p class="planning-reset-dialog__msg">¿Resetear semana?</p>
+    <p class="planning-reset-dialog__msg" id="planning-reset-msg">¿Resetear semana?</p>
     <div class="planning-reset-dialog__actions">
       <button type="button" id="planning-reset-cancel" class="planning-mode__btn planning-mode__btn--cancel">No</button>
       <button type="button" id="planning-reset-confirm" class="planning-mode__btn planning-mode__btn--danger">Sí</button>
@@ -1133,6 +1133,20 @@ function showPlanningMode(weekStr: string, overlay: HTMLElement): void {
 
     // Resetear: borrar todas las cards de la semana
     if (target.id === 'planning-reset') {
+      const msgEl = resetDialog.querySelector('#planning-reset-msg')!;
+      const cancelBtn = resetDialog.querySelector('#planning-reset-cancel') as HTMLButtonElement;
+      const confirmBtn = resetDialog.querySelector('#planning-reset-confirm') as HTMLButtonElement;
+
+      if (planningCards.length === 0) {
+        msgEl.textContent = 'Añadí una card para resetear';
+        cancelBtn.textContent = 'Entendido';
+        confirmBtn.style.display = 'none';
+      } else {
+        msgEl.textContent = '¿Resetear semana?';
+        cancelBtn.textContent = 'No';
+        confirmBtn.style.display = '';
+      }
+      
       // [SEC-2] Auditoría: confirmar antes de ejecutar la acción destructiva.
       resetDialog.showModal();
       return;
